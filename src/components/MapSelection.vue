@@ -1,4 +1,14 @@
+<!--
+  MapSelection.vue
+  This component displays a list of available maps and allows the user to select one.
+  Selecting a map updates the global state via the Pinia store.
+-->
 <script setup lang="ts">
+import { useMapStore } from '@/stores/mapStore'; // Import the store
+
+const store = useMapStore(); // Use the store
+
+// Array of map objects, each containing the name and path to its preview image.
 const maps = [
   {
     name: 'Erangel',
@@ -18,6 +28,8 @@ const maps = [
   }
 ]
 
+// Helper function to construct the path to a map's preview image.
+// Example: toPreviewPath('Erangel') returns 'src/assets/maps/erangel/Preview.png'
 const toPreviewPath = (map: string) => `src/assets/maps/${map.toLocaleLowerCase()}/Preview.png`
 </script>
 
@@ -43,7 +55,8 @@ const toPreviewPath = (map: string) => `src/assets/maps/${map.toLocaleLowerCase(
             variant="elevated"
             color="primary"
             block
-            @click="$emit('map-selected', map.name)"
+            @click="store.setSelectedMap(map.name)" // Update the selected map in the Pinia store.
+                                                    // This change will be reflected globally.
           ></v-btn>
         </template>
       </v-card>

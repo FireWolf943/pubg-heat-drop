@@ -1,24 +1,24 @@
+<!--
+  PubgMap.vue
+  This component displays a map with a heatmap layer. Users can click on the map to add points
+  to the heatmap. The map image, heatmap data, and heatmap radius are controlled by the Pinia store.
+-->
 <script setup lang="ts">
 import * as L from 'leaflet'
 import { nextTick, onMounted, ref, watch } from 'vue'
 import 'leaflet.heat'
 import 'leaflet/dist/leaflet.css'
+import { useMapStore } from '@/stores/mapStore' // Import the store
 
-const props = defineProps<{
-  selectedMap: string
-}>()
+const store = useMapStore() // Use the store
+
 const leafletMap = ref<L.Map>()
 const heat = ref<L.HeatLayer>()
-const heatLatLngs = ref<L.LatLng[]>([])
-const playerCount = ref<number>(100)
-
-const toMapPath = (map: string) => `src/assets/maps/${map.toLocaleLowerCase()}/Low_Res.png`
+const imageOverlay = ref<L.ImageOverlay>() // Store the image overlay instance
 
 const initMap = () => {
-  const bounds: L.LatLngBoundsLiteral = [
-    [0, 0],
-    [1000, 1000]
-  ]
+  // Get mapBounds from store
+  const bounds: L.LatLngBoundsLiteral = store.mapBounds
   leafletMap.value = L.map('pubgmap', {
     crs: L.CRS.Simple,
     minZoom: 0,
@@ -29,19 +29,22 @@ const initMap = () => {
     maxBounds: bounds,
     doubleClickZoom: false
   })
-  L.imageOverlay(toMapPath(props.selectedMap), bounds).addTo(leafletMap.value)
+  // Use mapImage getter from store and store the overlay
+  imageOverlay.value = L.imageOverlay(store.mapImage, bounds).addTo(leafletMap.value)
   leafletMap.value.fitBounds(bounds)
 
-  heatLatLngs.value = []
+  // Clear heat points in store for the new map
+  store.clearHeatPoints()
 
-  heat.value = L.heatLayer([], {
-    radius: 25
+  heat.value = L.heatLayer(store.heatLatLngs, { // Use heatLatLngs from store
+    radius: store.heatmapRadius // Use heatmapRadius from store
   }).addTo(leafletMap.value)
 
   leafletMap.value.on('click', (e: L.LeafletMouseEvent) => {
-    e.latlng.alt = 25 / playerCount.value
-    heatLatLngs.value.push(e.latlng)
-    heat.value?.setLatLngs(heatLatLngs.value)
+    const point = new L.LatLng(e.latlng.lat, e.latlng.lng)
+    point.alt = 25 / store.playerCount // Use playerCount from store
+    store.addHeatPoint(point) // Add point to store
+    heat.value?.setLatLngs(store.heatLatLngs) // Update heat layer
   })
 }
 
@@ -52,11 +55,32 @@ onMounted(() => {
 })
 
 watch(
-  () => props.selectedMap,
+  () => store.selectedMap, // Watch selectedMap from store
   () => {
-    leafletMap.value?.remove()
-    heat.value?.remove()
-    initMap()
+    if (leafletMap.value && imageOverlay.value) {
+      // Update existing map
+      imageOverlay.value.setUrl(store.mapImage);
+      leafletMap.value.fitBounds(store.mapBounds); // Adjust view
+      store.clearHeatPoints(); // Clear points for the new map
+      heat.value?.setLatLngs(store.heatLatLngs); // Update heat layer with (now empty) points
+    } else {
+      // First-time setup or if map/overlay somehow don't exist
+      leafletMap.value?.remove(); // Clean up if only one exists
+      heat.value?.remove();
+      initMap();
+    }
+    // This ensures the heat layer (which might have been re-created or just cleared)
+    // reflects the current (empty) state of heatLatLngs for the new map.
+    // If initMap() was called, it already sets up the heat layer with current store.heatLatLngs.
+    // If only setUrl was called, this line is also important.
+    heat.value?.setLatLngs(store.heatLatLngs);
+  }
+)
+
+watch(
+  () => store.heatmapRadius, // Watch heatmapRadius from store
+  (newRadius) => {
+    heat.value?.setOptions({ radius: newRadius });
   }
 )
 </script>
@@ -67,7 +91,7 @@ watch(
 
 <style scoped lang="scss">
 .mapContainer {
-  height: 100vh;
+  height: 100%;
   overflow: hidden;
   background-color: black;
 }
